@@ -1,0 +1,53 @@
+{
+  "name": "scamshield-ai-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Secure REST API for ScamShield AI (Node.js, Express, MySQL, Sequelize).",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "dev:demo": "node scripts/devDemo.js",
+    "db:create": "node scripts/createDatabase.js",
+    "db:migrate": "sequelize-cli db:migrate",
+    "db:migrate:undo": "sequelize-cli db:migrate:undo",
+    "db:reset": "sequelize-cli db:migrate:undo:all && sequelize-cli db:migrate",
+    "test": "node --test tests/risk.test.js tests/urlDetection.test.js tests/messageDetection.test.js tests/integration/api.test.js",
+    "test:unit": "node --test tests/risk.test.js tests/urlDetection.test.js tests/messageDetection.test.js",
+    "test:integration": "node --test tests/integration/api.test.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "scam-detection",
+    "express",
+    "mysql",
+    "sequelize"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.13.2",
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.2",
+    "express-validator": "^7.3.0",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.5.0",
+    "mysql2": "^3.15.3",
+    "nodemailer": "^10.3.1",
+    "sequelize": "^6.37.7",
+    "sharp": "^0.35.5",
+    "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "mysql-memory-server": "^1.18.0",
+    "nodemon": "^3.1.11",
+    "sequelize-cli": "^6.6.3",
+    "supertest": "^7.1.4"
+  }
+}

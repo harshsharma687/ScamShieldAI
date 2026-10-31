@@ -1,0 +1,1571 @@
+{
+  "info": {
+    "_postman_id": "c91a4deb-2c3c-4c3c-be72-26bef79c5652",
+    "name": "ScamShield AI API",
+    "description": "Complete API tests for the ScamShield AI backend. Run Auth → Register first; it stores accessToken and email. Postman keeps the HTTP-only refresh cookie automatically.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Authentication",
+      "description": "Register first, then run the other auth requests.",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Creates a fresh account. Sample body is included. Expected: 201 with accessToken and safe user data.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo User\",\n  \"email\": \"demo{{$timestamp}}@example.com\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"201 Created\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Success envelope\", function () {",
+                  "  pm.expect(body.success).to.eql(true);",
+                  "});",
+                  "pm.test(\"No password hash is exposed\", function () {",
+                  "  pm.expect(JSON.stringify(body.data.user).toLowerCase()).to.not.include(\"password\");",
+                  "});",
+                  "pm.collectionVariables.set(\"accessToken\", body.data.accessToken);",
+                  "pm.collectionVariables.set(\"email\", body.data.user.email);",
+                  "pm.collectionVariables.set(\"userId\", body.data.user.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Expected: 200. Rotates the refresh cookie and returns a new accessToken.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set(\"accessToken\", body.data.accessToken);",
+                  "pm.test(\"Token returned\", function () {",
+                  "  pm.expect(body.data.accessToken).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Expected: 200 with the safe user object (no password)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Email matches\", function () {",
+                  "  pm.expect(pm.response.json().data.user.email).to.eql(pm.collectionVariables.get(\"email\"));",
+                  "});",
+                  "pm.test(\"No password field\", function () {",
+                  "  pm.expect(pm.response.json().data.user).to.not.have.property(\"password\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh Session",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Uses the HTTP-only cookie. Expected: 200 with a new accessToken. The previous refresh token is revoked."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set(\"accessToken\", body.data.accessToken);",
+                  "pm.test(\"New access token\", function () {",
+                  "  pm.expect(body.data.accessToken).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Revokes the current refresh token and clears the cookie. Expected: 200."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/forgot-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "forgot-password"
+              ]
+            },
+            "description": "Expected: 200 when SMTP is configured, or 503 EMAIL_NOT_CONFIGURED. It never reveals whether an account exists.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Honest response\", function () {",
+                  "  pm.expect([200, 503]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 503) {",
+                  "  pm.test(\"Email explicitly not configured\", function () {",
+                  "    pm.expect(pm.response.json().code).to.eql(\"EMAIL_NOT_CONFIGURED\");",
+                  "  });",
+                  "} else {",
+                  "  pm.test(\"Generic message\", function () {",
+                  "    pm.expect(pm.response.json().message.toLowerCase()).to.include(\"if an account exists\");",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset Password (invalid token)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "reset-password"
+              ]
+            },
+            "description": "Negative test. A real token arrives by email. Expected: 400 RESET_TOKEN_INVALID.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"0000000000000000000000000000000000000000000000000000000000000000\",\n  \"password\": \"{{newPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400 Bad Request\", function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"Invalid reset token\", function () {",
+                  "  pm.expect(pm.response.json().code).to.eql(\"RESET_TOKEN_INVALID\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify Email Change (invalid token)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify-email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "verify-email"
+              ]
+            },
+            "description": "Negative test. Expected: 400 VERIFICATION_TOKEN_INVALID.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"0000000000000000000000000000000000000000000000000000000000000000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400 Bad Request\", function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"Invalid verification token\", function () {",
+                  "  pm.expect(pm.response.json().code).to.eql(\"VERIFICATION_TOKEN_INVALID\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Dashboard",
+      "description": "All numbers are calculated from this user's MySQL rows.",
+      "item": [
+        {
+          "name": "Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dashboard",
+                "stats"
+              ]
+            },
+            "description": "Expected: 200. Includes totalScans, safeItems, suspiciousItems, needsReviewItems, unverifiedItems, filesUploaded, typeStatistics and riskBreakdown."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const stats = pm.response.json().data;",
+                  "pm.test(\"Numeric per-user stats\", function () {",
+                  "  pm.expect(stats.totalScans).to.be.a(\"number\");",
+                  "  pm.expect(stats.typeStatistics).to.have.all.keys(\"image\", \"link\", \"message\");",
+                  "});",
+                  "pm.test(\"No demo constants required\", function () {",
+                  "  pm.expect(stats.totalScans).to.eql(stats.typeStatistics.image + stats.typeStatistics.link + stats.typeStatistics.message);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Recent Scans",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/recent-scans?limit=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dashboard",
+                "recent-scans?limit=5"
+              ]
+            },
+            "description": "Expected: 200 with up to 5 newest scans for this user."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"At most five scans\", function () {",
+                  "  pm.expect(pm.response.json().data.scans.length).to.be.at.most(5);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Scans",
+      "description": "Image, link and message scans with real result objects.",
+      "item": [
+        {
+          "name": "Scan Message (high risk)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/scans/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "scans",
+                "message"
+              ]
+            },
+            "description": "Expected: 201. With no AI key, risk is still evidence-based and marked verified:false / heuristic-fallback.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"URGENT: Your bank account is blocked. Click here to verify your account: https://secure-login-paypal.example.tk/verify-account and send your OTP immediately.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"201 Created\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const data = pm.response.json().data;",
+                  "pm.test(\"Evidence-based scam verdict\", function () {",
+                  "  pm.expect(data.result.riskScore).to.be.at.least(60);",
+                  "  pm.expect(data.result.isScam).to.eql(true);",
+                  "});",
+                  "pm.test(\"Fallback is clearly labelled\", function () {",
+                  "  if (data.result.detectionSource === \"heuristic-fallback\") {",
+                  "    pm.expect(data.result.verified).to.eql(false);",
+                  "    pm.expect(data.result.explanation.toLowerCase()).to.include(\"ai analysis was unavailable\");",
+                  "  }",
+                  "});",
+                  "pm.collectionVariables.set(\"messageScanId\", data.scan.id);",
+                  "pm.collectionVariables.set(\"scanId\", data.scan.id);",
+                  "pm.collectionVariables.set(\"riskLevel\", data.result.riskLevel);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Scan Link (phishing URL)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/scans/link",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "scans",
+                "link"
+              ]
+            },
+            "description": "Expected: 201 with brand-impersonation evidence.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://secure-login-paypal.example.tk/verify-account\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"201 Created\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const data = pm.response.json().data;",
+                  "pm.test(\"Suspicious link\", function () {",
+                  "  pm.expect(data.result.riskScore).to.be.at.least(60);",
+                  "});",
+                  "pm.collectionVariables.set(\"linkScanId\", data.scan.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Scan Image (JPG/PNG)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": "sample-image.png",
+                  "description": "Select backend/postman/sample-image.png if Postman does not resolve the relative path."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/scans/image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "scans",
+                "image"
+              ]
+            },
+            "description": "Expected: 201 when a vision AI provider is configured, otherwise 503 AI_NOT_CONFIGURED. A 503 is an honest failure, not a fake safe verdict."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Completed or AI explicitly unavailable\", function () {",
+                  "  pm.expect([201, 503]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.collectionVariables.set(\"imageScanId\", data.scan.id);",
+                  "  pm.test(\"Risk result returned\", function () {",
+                  "    pm.expect(data.result.riskLevel).to.be.oneOf([\"Low\", \"Medium\", \"High\", \"Critical\"]);",
+                  "  });",
+                  "} else {",
+                  "  pm.test(\"No fake image verdict\", function () {",
+                  "    pm.expect(pm.response.json().code).to.eql(\"AI_NOT_CONFIGURED\");",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Scan by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/scans/{{scanId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "scans",
+                "{{scanId}}"
+              ]
+            },
+            "description": "Expected: 200; includes the scan and its latest result."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Correct scan\", function () {",
+                  "  pm.expect(pm.response.json().data.scan.id).to.eql(pm.collectionVariables.get(\"scanId\"));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Image File (if created)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/scans/{{imageScanId}}/file",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "scans",
+                "{{imageScanId}}",
+                "file"
+              ]
+            },
+            "description": "Expected: 200 with image bytes if an AI image scan succeeded; 404 if no image scan exists (for example AI is not configured)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Owner-only file response\", function () {",
+                  "  pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. History",
+      "description": "Pagination, filters, search and deletion.",
+      "item": [
+        {
+          "name": "List History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/history?limit=10&page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "history?limit=10&page=1"
+              ]
+            },
+            "description": "Expected: 200 with scans + meta.pagination."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Pagination metadata\", function () {",
+                  "  const meta = pm.response.json().meta;",
+                  "  pm.expect(meta.pagination).to.include.keys(\"page\", \"limit\", \"total\", \"totalPages\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Filter by Type",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/history?type=message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "history?type=message"
+              ]
+            },
+            "description": "Expected: 200; every scan is a message scan."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Only messages\", function () {",
+                  "  pm.response.json().data.scans.forEach(function (scan) {",
+                  "    pm.expect(scan.scanType).to.eql(\"message\");",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Filter by Risk Level",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/history?riskLevel={{riskLevel}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "history?riskLevel={{riskLevel}}"
+              ]
+            },
+            "description": "Expected: 200; every returned result matches the stored risk level."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Risk filter applied\", function () {",
+                  "  pm.response.json().data.scans.forEach(function (scan) {",
+                  "    pm.expect(scan.result.riskLevel).to.eql(pm.collectionVariables.get(\"riskLevel\"));",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/history?search=bank%20account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "history?search=bank%20account"
+              ]
+            },
+            "description": "Expected: 200; searches the submitted message/link text."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sort Oldest First",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/history?sort=oldest",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "history?sort=oldest"
+              ]
+            },
+            "description": "Expected: 200; oldest scan first."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get History Item",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/history/{{scanId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "history",
+                "{{scanId}}"
+              ]
+            },
+            "description": "Expected: 200 for the owner."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete One Scan",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/history/{{messageScanId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "history",
+                "{{messageScanId}}"
+              ]
+            },
+            "description": "Expected: 200 and removes the scan (files included)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete All History",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "history"
+              ]
+            },
+            "description": "Expected: 200 with deletedCount. This only affects the signed-in user."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"deletedCount returned\", function () {",
+                  "  pm.expect(pm.response.json().data.deletedCount).to.be.a(\"number\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Negative & security tests",
+      "description": "Unauthorized, invalid and SSRF cases.",
+      "item": [
+        {
+          "name": "Unauthorized Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dashboard",
+                "stats"
+              ]
+            },
+            "description": "No Authorization header. Expected: 401 AUTH_REQUIRED."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401 Unauthorized\", function () {",
+                  "  pm.response.to.have.status(401);",
+                  "});",
+                  "pm.test(\"Auth required code\", function () {",
+                  "  pm.expect(pm.response.json().code).to.eql(\"AUTH_REQUIRED\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Duplicate Registration",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Expected: 409 EMAIL_IN_USE (run after Register).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Duplicate\",\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"409 Conflict\", function () {",
+                  "  pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid Registration",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Expected: 422 with field-level errors.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"X\",\n  \"email\": \"not-an-email\",\n  \"password\": \"short\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"422 Validation Error\", function () {",
+                  "  pm.response.to.have.status(422);",
+                  "});",
+                  "pm.test(\"Field errors returned\", function () {",
+                  "  pm.expect(pm.response.json().errors).to.be.an(\"array\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Localhost URL is blocked (SSRF)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/scans/link",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "scans",
+                "link"
+              ]
+            },
+            "description": "Expected: 400 BLOCKED_DESTINATION. The backend never visits the URL.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"http://127.0.0.1:5000/admin\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400 Blocked destination\", function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"SSRF block code\", function () {",
+                  "  pm.expect(pm.response.json().code).to.eql(\"BLOCKED_DESTINATION\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Private metadata IP is blocked",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/scans/link",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "scans",
+                "link"
+              ]
+            },
+            "description": "Expected: 400 BLOCKED_DESTINATION.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"http://169.254.169.254/latest/meta-data\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400 Blocked destination\", function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "FTP scheme is rejected",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/scans/link",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "scans",
+                "link"
+              ]
+            },
+            "description": "Expected: 422 INVALID_URL_SCHEME.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"ftp://example.com/file\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"422 Invalid scheme\", function () {",
+                  "  pm.response.to.have.status(422);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Empty Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/scans/message",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "scans",
+                "message"
+              ]
+            },
+            "description": "Expected: 422 VALIDATION_ERROR.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"   \"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"422 Validation Error\", function () {",
+                  "  pm.response.to.have.status(422);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unknown Route",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/does-not-exist",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "does-not-exist"
+              ]
+            },
+            "description": "Expected: 404 ROUTE_NOT_FOUND."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"404 Not Found\", function () {",
+                  "  pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Settings (run last)",
+      "description": "Profile, password and account lifecycle.",
+      "item": [
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/settings/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "settings",
+                "profile"
+              ]
+            },
+            "description": "Expected: 200 with safe profile fields."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Name",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/settings/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "settings",
+                "profile"
+              ]
+            },
+            "description": "Expected: 200.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Demo User Updated\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Name updated\", function () {",
+                  "  pm.expect(pm.response.json().data.user.name).to.eql(\"Demo User Updated\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/settings/change-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "settings",
+                "change-password"
+              ]
+            },
+            "description": "Expected: 200. Revokes refresh sessions. The collection then uses newPassword for account deletion.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"{{password}}\",\n  \"newPassword\": \"{{newPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Use a fresh password each collection run so reruns do not fail the \"must be different\" rule.",
+                  "pm.collectionVariables.set(\"newPassword\", \"NewPass\" + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.collectionVariables.set(\"password\", pm.collectionVariables.get(\"newPassword\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Account",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/settings/account",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "settings",
+                "account"
+              ]
+            },
+            "description": "IRREVERSIBLE. Expected: 200. Cascades scans, results, refresh tokens and uploaded files. Run last.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000/api"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "email",
+      "value": ""
+    },
+    {
+      "key": "password",
+      "value": "Password123"
+    },
+    {
+      "key": "newPassword",
+      "value": "NewPassword123"
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "scanId",
+      "value": ""
+    },
+    {
+      "key": "messageScanId",
+      "value": ""
+    },
+    {
+      "key": "linkScanId",
+      "value": ""
+    },
+    {
+      "key": "imageScanId",
+      "value": ""
+    },
+    {
+      "key": "riskLevel",
+      "value": ""
+    }
+  ]
+}
