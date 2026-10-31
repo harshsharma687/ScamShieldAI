@@ -1,0 +1,236 @@
+.scan-message-page {
+  width: 100%;
+  color: var(--ink);
+}
+
+.message-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.message-label {
+  color: var(--accent-strong);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 2.2px;
+}
+
+.message-heading h2 {
+  font-size: 28px;
+  letter-spacing: -0.5px;
+  margin: 7px 0;
+}
+
+.message-heading p {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.message-icon {
+  width: 58px;
+  height: 58px;
+  flex: 0 0 58px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  font-size: 25px;
+}
+
+.message-banner {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 21px;
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 95% 0%, rgba(234, 170, 0, 0.22), transparent 32%),
+    linear-gradient(120deg, var(--purple), var(--purple-soft));
+  color: var(--on-purple);
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-md);
+}
+
+.message-banner > span {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: rgba(221, 227, 232, 0.09);
+  border: 1px solid rgba(221, 227, 232, 0.16);
+  font-size: 24px;
+}
+
+.message-banner h3 {
+  font-size: 15px;
+  margin-bottom: 5px;
+}
+
+.message-banner p {
+  color: rgba(221, 227, 232, 0.72);
+  font-size: 11.5px;
+  line-height: 1.65;
+}
+
+.message-card {
+  padding: 24px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.message-card h3 {
+  font-size: 17px;
+}
+
+.message-card > p {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 7px 0 17px;
+}
+
+.message-card textarea {
+  width: 100%;
+  min-height: 190px;
+  padding: 14px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.message-card textarea:focus {
+  border-color: var(--accent-strong);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.message-actions {
+  display: flex;
+  gap: 11px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.message-scan-button,
+.message-clear-button {
+  padding: 12px 20px;
+  border: none;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.message-scan-button {
+  background: var(--accent);
+  color: var(--purple);
+  box-shadow: 0 6px 16px rgba(234, 170, 0, 0.22);
+}
+
+.message-scan-button:hover:not(:disabled) {
+  background: var(--accent-strong);
+  transform: translateY(-1px);
+}
+
+.message-scan-button:disabled {
+  background: #d8dde2;
+  color: #7c858d;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.message-clear-button {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  color: var(--ink-soft);
+}
+
+.message-clear-button:hover {
+  background: var(--surface-tint);
+}
+
+.message-result {
+  margin-top: 18px;
+  padding: 16px;
+  border-radius: 10px;
+  border-left: 4px solid #7da99a;
+  background: var(--success-soft);
+}
+
+.message-result h4 {
+  margin-bottom: 7px;
+  font-size: 14px;
+}
+
+.message-result p {
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.message-result.warning {
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.message-result.error {
+  border-left-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.message-result.error h4,
+.message-result.error p {
+  color: var(--danger);
+}
+
+.message-warning {
+  display: flex;
+  gap: 10px;
+  padding: 14px;
+  margin-top: 18px;
+  border: 1px solid var(--accent-border);
+  border-radius: 11px;
+  background: var(--accent-soft);
+}
+
+.message-warning span {
+  font-size: 17px;
+}
+
+.message-warning p {
+  color: var(--ink-soft);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+@media (max-width: 600px) {
+  .message-heading h2 {
+    font-size: 23px;
+  }
+
+  .message-icon {
+    width: 48px;
+    height: 48px;
+    flex-basis: 48px;
+    font-size: 21px;
+  }
+
+  .message-card {
+    padding: 16px;
+  }
+}

@@ -12,3 +12,15 @@ logs/
 npm-debug.log*
 .DS_Store
 Thumbs.db
+
+# Frontend dependencies and build
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+frontend/.tmp-*
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/.cache/
+
