@@ -6,6 +6,9 @@
  */
 const { Sequelize } = require("sequelize");
 const env = require("./env");
+const { buildMysqlSslOptions } = require("./mysqlSsl");
+
+const sslOptions = buildMysqlSslOptions();
 
 const sequelize = new Sequelize(
   env.database.name,
@@ -26,13 +29,15 @@ const sequelize = new Sequelize(
       collate: "utf8mb4_unicode_ci",
     },
     pool: {
-      max: 10,
+      max: env.database.poolMax,
       min: 0,
       acquire: 30_000,
       idle: 10_000,
     },
     dialectOptions: {
       charset: "utf8mb4",
+      // Hosted providers require TLS; local MySQL does not set DB_SSL.
+      ...(sslOptions ? { ssl: sslOptions } : {}),
     },
   }
 );

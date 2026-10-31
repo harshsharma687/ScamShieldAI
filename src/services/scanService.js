@@ -31,6 +31,11 @@ async function completeScan(scan, analysis) {
         isScam,
         explanation: analysis.explanation,
         recommendation: analysis.recommendation,
+        // Easy Hindi + easy English versions of the same verdict.
+        explanationHi: analysis.answers?.hi?.explanation || null,
+        explanationEn: analysis.answers?.en?.explanation || null,
+        recommendationHi: analysis.answers?.hi?.recommendation || null,
+        recommendationEn: analysis.answers?.en?.recommendation || null,
         detectionSource: analysis.detectionSource,
       },
       { transaction }

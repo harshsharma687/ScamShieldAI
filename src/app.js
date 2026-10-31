@@ -100,6 +100,9 @@ app.get(
       status: "ok",
       database: "connected",
       environment: env.nodeEnv,
+      // Lets the operator confirm the AI provider without exposing the key.
+      aiConfigured: Boolean(env.ai.apiUrl && env.ai.apiKey),
+      aiModel: env.ai.apiKey ? env.ai.model : null,
       timestamp: new Date().toISOString(),
     });
   })

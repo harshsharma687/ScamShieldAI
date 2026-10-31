@@ -27,6 +27,7 @@ const {
   isScamScore,
   buildRecommendation,
 } = require("../utils/risk");
+const { buildEasyAnswer, answersFromAi } = require("../utils/bilingual");
 
 const MAX_INPUT_PIXELS = 40_000_000; // ~40 MP decompression-bomb guard
 
@@ -75,8 +76,10 @@ async function prepareImage(buffer) {
 }
 
 function buildImageExplanation(ai) {
+  // AI writes in the language of the image's visible text (English, Hindi or
+  // Hinglish), so its explanation comes first.
   return [
-    `Vision analysis: ${ai.explanation}`,
+    ai.explanation,
     `The uploaded image was decoded (${ai.width}x${ai.height}) and checked for visible scam indicators, impersonation and credential or payment requests.`,
     "Image analysis is assistive. Forged screenshots may evade detection, and a low score is not a guarantee that the image is legitimate.",
   ]
@@ -124,8 +127,17 @@ function buildOcrFallback({ prepared, ocr, aiError }) {
     indicators.reduce((total, item) => total + item.weight, 0)
   );
   const riskLevel = classifyRisk(riskScore);
+  const answers = buildEasyAnswer({ riskLevel, riskScore, indicators });
+
+  answers.hi.explanation += hasReadableText
+    ? " यह इमेज की AI जाँच नहीं है, इसलिए इसे सुरक्षित न मानें।"
+    : " इमेज में पढ़ने लायक टेक्स्ट नहीं मिला, इसलिए इसे सुरक्षित या असुरक्षित कुछ भी न मानें।";
+  answers.en.explanation += hasReadableText
+    ? " This was not an AI image check, so do not treat the image as safe."
+    : " No readable text was found, so this image could not be checked at all.";
 
   return {
+    answers,
     riskScore,
     riskLevel,
     isScam: isScamScore(riskScore),
@@ -151,8 +163,10 @@ function buildOcrFallback({ prepared, ocr, aiError }) {
   };
 }
 
-async function analyzeImage({ buffer }) {
-  const prepared = await prepareImage(buffer);
+async function analyzeImage({ buffer, prepared: preparedImage }) {
+  // The controller may already have decoded the image (to store it), in which
+  // case it passes the prepared copy instead of decoding twice.
+  const prepared = preparedImage || (await prepareImage(buffer));
   let ai = null;
   let aiError = null;
 
@@ -183,6 +197,12 @@ async function analyzeImage({ buffer }) {
         height: prepared.height,
       }),
       recommendation: ai.recommendation || buildRecommendation(riskLevel),
+      answers: answersFromAi({
+        ai,
+        riskLevel,
+        riskScore: ai.riskScore,
+        indicators: ai.indicators || [],
+      }),
       detectionSource: "ai-vision",
       verified: true,
       indicators: ai.indicators,

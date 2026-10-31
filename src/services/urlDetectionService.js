@@ -22,6 +22,7 @@ const {
   isScamScore,
   buildRecommendation,
 } = require("../utils/risk");
+const { buildEasyAnswer, answersFromAi } = require("../utils/bilingual");
 
 const SHORTENER_DOMAINS = new Set([
   "bit.ly",
@@ -132,6 +133,45 @@ const SCAM_KEYWORDS = [
   "refund",
   "otp",
 ];
+
+// Exact registrable domains owned by the brands above. A lookalike such as
+// "paypal-secure-login.xyz" starts with the brand name but is NOT in this set,
+// so it is still flagged. Subdomains of a real domain (accounts.google.com)
+// resolve to the official registrable domain and stay clean.
+const OFFICIAL_DOMAINS = new Set([
+  "paypal.com",
+  "paypal.me",
+  "amazon.com",
+  "amazon.in",
+  "amazon.co.uk",
+  "apple.com",
+  "icloud.com",
+  "google.com",
+  "gmail.com",
+  "youtube.com",
+  "facebook.com",
+  "instagram.com",
+  "whatsapp.com",
+  "netflix.com",
+  "coinbase.com",
+  "binance.com",
+  "chase.com",
+  "wellsfargo.com",
+  "bankofamerica.com",
+  "sbi.co.in",
+  "onlinesbi.sbi",
+  "sbicard.com",
+  "hdfcbank.com",
+  "hdfc.com",
+  "icicibank.com",
+  "icici.com",
+  "axisbank.com",
+  "paytm.com",
+  "phonepe.com",
+  "irs.gov",
+  "incometax.gov.in",
+  "icegate.gov.in",
+]);
 
 const MULTI_PART_SUFFIXES = new Set([
   "co.in",
@@ -374,12 +414,14 @@ function getUrlIndicators(parsedUrl) {
     );
   }
 
-  const brandHit = BRAND_NAMES.find(
-    (brand) =>
-      (hostname.includes(brand) || pathAndQuery.includes(brand)) &&
-      !registrable.startsWith(brand) &&
-      !registrable.split(".").includes(brand)
-  );
+  const brandHit = BRAND_NAMES.find((brand) => {
+    const mentionsBrand =
+      hostname.includes(brand) || pathAndQuery.includes(brand);
+
+    if (!mentionsBrand) return false;
+
+    return !OFFICIAL_DOMAINS.has(registrable);
+  });
 
   if (brandHit) {
     add(
@@ -483,6 +525,12 @@ async function checkSafeBrowsing(url) {
 function buildUrlExplanation({ indicators, ai, aiError, threatIntel, level }) {
   const parts = [];
 
+  // When AI answered, its explanation leads: it is written in the same
+  // language as the submitted URL page/content (English, Hindi or Hinglish).
+  if (ai) {
+    parts.push(ai.explanation);
+  }
+
   if (threatIntel.matched) {
     parts.push(
       `Google Safe Browsing matched this URL as a known threat${
@@ -501,9 +549,7 @@ function buildUrlExplanation({ indicators, ai, aiError, threatIntel, level }) {
     parts.push("Deterministic URL checks found no structural warning signs.");
   }
 
-  if (ai) {
-    parts.push(`AI analysis: ${ai.explanation}`);
-  } else {
+  if (!ai) {
     parts.push(
       `AI analysis was unavailable${
         aiError?.code === "AI_NOT_CONFIGURED" ? " (no AI provider configured)" : ""
@@ -578,6 +624,10 @@ async function analyzeUrl(rawUrl) {
       level: riskLevel,
     }),
     recommendation,
+    // Easy Hindi + easy English version of the same verdict.
+    answers: aiResult.ai
+      ? answersFromAi({ ai: aiResult.ai, riskLevel, riskScore: score, indicators })
+      : buildEasyAnswer({ riskLevel, riskScore: score, indicators }),
     detectionSource,
     verified: Boolean(aiResult.ai || threatIntel.checked),
     indicators,

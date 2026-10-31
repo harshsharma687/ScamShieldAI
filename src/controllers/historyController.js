@@ -8,6 +8,7 @@ const { Scan, DetectionResult } = require("../models");
 const { getOwnedScan } = require("../services/scanService");
 const { serializeScan } = require("../utils/serializers");
 const { resolveUploadPath, deleteUpload } = require("../utils/fileStorage");
+const { destroyImage } = require("../services/cloudStorageService");
 
 const RISK_LEVELS = ["Low", "Medium", "High", "Critical"];
 
@@ -108,6 +109,13 @@ const getScanFile = asyncHandler(async (req, res) => {
     });
   }
 
+  // Cloud-stored images are served by Cloudinary. The URL stays unguessable,
+  // and this route still proves the caller owns the scan before redirecting.
+  if (/^https:\/\//i.test(scan.fileUrl)) {
+    res.setHeader("Cache-Control", "private, max-age=60");
+    return res.redirect(302, scan.fileUrl);
+  }
+
   const absolutePath = resolveUploadPath(scan.fileUrl);
 
   if (!absolutePath) {
@@ -137,7 +145,7 @@ const getScanFile = asyncHandler(async (req, res) => {
 const deleteScan = asyncHandler(async (req, res) => {
   const scan = await Scan.findOne({
     where: { id: req.params.id, userId: req.userId },
-    attributes: ["id", "fileUrl"],
+    attributes: ["id", "fileUrl", "filePublicId"],
   });
 
   if (!scan) {
@@ -145,9 +153,12 @@ const deleteScan = asyncHandler(async (req, res) => {
   }
 
   const file = scan.fileUrl;
+  const publicId = scan.filePublicId;
   await scan.destroy();
 
-  if (file) {
+  if (publicId) {
+    await destroyImage(publicId).catch(() => {});
+  } else if (file) {
     try {
       await deleteUpload(file);
     } catch {
@@ -162,13 +173,19 @@ const deleteScan = asyncHandler(async (req, res) => {
 const deleteAllHistory = asyncHandler(async (req, res) => {
   const scans = await Scan.findAll({
     where: { userId: req.userId },
-    attributes: ["id", "fileUrl"],
+    attributes: ["id", "fileUrl", "filePublicId"],
   });
 
   const deletedCount = await Scan.destroy({ where: { userId: req.userId } });
 
   await Promise.allSettled(
-    scans.filter((scan) => scan.fileUrl).map((scan) => deleteUpload(scan.fileUrl))
+    scans
+      .filter((scan) => scan.fileUrl)
+      .map((scan) =>
+        scan.filePublicId
+          ? destroyImage(scan.filePublicId)
+          : deleteUpload(scan.fileUrl)
+      )
   );
 
   return sendSuccess(res, 200, "Scan history deleted.", { deletedCount });

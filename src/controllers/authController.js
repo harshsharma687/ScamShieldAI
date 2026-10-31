@@ -6,11 +6,17 @@ const { User } = require("../models");
 const AppError = require("../utils/AppError");
 const asyncHandler = require("../utils/asyncHandler");
 const { sendSuccess } = require("../utils/apiResponse");
-const { hashToken, clearRefreshCookie, REFRESH_COOKIE_NAME } = require("../utils/generateToken");
+const {
+  hashToken,
+  clearRefreshCookie,
+  verifyAccessToken,
+  REFRESH_COOKIE_NAME,
+} = require("../utils/generateToken");
 const {
   createSession,
   rotateRefreshToken,
   revokeRefreshToken,
+  revokeSessionById,
   revokeAllUserTokens,
 } = require("../services/refreshTokenService");
 const {
@@ -105,12 +111,34 @@ const refresh = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * The session id carried by a valid access token, or null. Reading it is only
+ * used to end that exact session on logout.
+ */
+function accessSessionId(req) {
+  const header = req.headers.authorization;
+
+  if (!header || !header.startsWith("Bearer ")) return null;
+
+  try {
+    const payload = verifyAccessToken(header.slice("Bearer ".length).trim());
+    return Number.isFinite(payload.sid) ? payload.sid : null;
+  } catch {
+    return null;
+  }
+}
+
 const logout = asyncHandler(async (req, res) => {
   const rawToken = req.cookies?.[REFRESH_COOKIE_NAME];
 
   if (rawToken) {
     await revokeRefreshToken(rawToken);
   }
+
+  // If the refresh cookie is already gone (cleared storage, private window),
+  // the access token still names its session. End it, so signing out is
+  // immediate instead of leaving the token usable until it expires.
+  await revokeSessionById(accessSessionId(req));
 
   clearRefreshCookie(res);
 

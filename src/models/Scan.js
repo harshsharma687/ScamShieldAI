@@ -20,10 +20,16 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
-      // Internal path such as "uploads/ab12.png". It is never served publicly;
-      // owners download it through GET /api/scans/:id/file.
+      // Internal path such as "uploads/ab12.png" or a Cloudinary secure URL.
+      // It is never served publicly; owners download it through
+      // GET /api/scans/:id/file.
       fileUrl: {
         type: DataTypes.STRING(512),
+        allowNull: true,
+      },
+      // Cloudinary public id, used to delete the stored image for real.
+      filePublicId: {
+        type: DataTypes.STRING(255),
         allowNull: true,
       },
       status: {

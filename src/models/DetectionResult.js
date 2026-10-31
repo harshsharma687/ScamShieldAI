@@ -36,6 +36,24 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: false,
       },
+      // The same verdict written twice in plain language, so a reader never has
+      // to parse the technical explanation above.
+      explanationHi: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      explanationEn: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      recommendationHi: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      recommendationEn: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
       // Examples: "ai+heuristics", "heuristic-fallback", "ai-vision".
       detectionSource: {
         type: DataTypes.STRING(64),

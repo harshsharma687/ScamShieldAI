@@ -9,6 +9,8 @@
     "dev": "nodemon server.js",
     "dev:demo": "node scripts/devDemo.js",
     "db:create": "node scripts/createDatabase.js",
+    "db:check": "node scripts/checkDatabase.js",
+    "db:backfill:answers": "node scripts/backfillBilingualAnswers.js",
     "db:migrate": "sequelize-cli db:migrate",
     "db:migrate:undo": "sequelize-cli db:migrate:undo",
     "db:reset": "sequelize-cli db:migrate:undo:all && sequelize-cli db:migrate",
@@ -29,6 +31,7 @@
   "dependencies": {
     "axios": "^1.13.2",
     "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.11.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",

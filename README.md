@@ -278,7 +278,35 @@ Invoke-RestMethod http://localhost:5000/api/health
 
 You should see `success: true` and `database: connected`.
 
-### 3.4 Useful database commands
+### 3.4 Hosted MySQL (for deployment)
+
+Free managed MySQL options that work with this backend: **Aiven** (free MySQL
+plan), **Railway** (MySQL service), **TiDB Cloud Serverless** and
+**PlanetScale** (MySQL-compatible). Managed servers require TLS, so add:
+
+```env
+DB_HOST=your-service.aivencloud.com
+DB_PORT=12345
+DB_NAME=defaultdb
+DB_USER=avnadmin
+DB_PASSWORD=the-password-from-the-provider
+DB_SSL=true
+DB_SSL_CA_PATH=
+```
+
+Then run these two commands against the hosted server — they also create every
+table and index:
+
+```powershell
+npm run db:check     # connection + schema check (prints no secrets)
+npm run db:migrate   # creates users, scans, detection_results, refresh_tokens
+```
+
+`DB_SSL_CA_PATH` is optional: point it at the CA file the provider gives you to
+verify the certificate fully. Without it the connection is still encrypted.
+Your local MySQL keeps working by simply leaving `DB_SSL=false`.
+
+### 3.5 Useful database commands
 
 ```powershell
 npm run db:migrate          # apply pending migrations
@@ -301,21 +329,78 @@ DESCRIBE refresh_tokens;
 
 ## 4. AI detection configuration
 
-The backend uses an **OpenAI-compatible chat completions API**. A documented option with vision support is Z.ai (GLM), but any compatible provider works.
+The backend uses an **OpenAI-compatible chat completions API** with vision support, so the same key covers message, link and image scans.
+
+**Google Gemini (free tier, recommended):** create a key at
+<https://aistudio.google.com/apikey>, then:
 
 ```env
-AI_API_URL=https://api.z.ai/api/paas/v4
+AI_API_URL=https://generativelanguage.googleapis.com/v1beta/openai
 AI_API_KEY=your-real-key
-AI_MODEL=glm-4v-plus
-AI_TIMEOUT_MS=30000
+AI_MODEL=gemini-flash-lite-latest
+AI_TIMEOUT_MS=45000
 ```
 
-- Create/sign in to the provider, create an API key, and confirm the current model name supports **vision** for image scans.
+Note the `/v1beta/openai` segment: there is no `/v1` in that base URL.
+Model access differs per Google project: `gemini-flash-lite-latest` is the safe
+default, `gemini-flash-latest` / `gemini-3-flash-preview` are faster but can
+return `503` during peak demand. A `404 "no longer available to new users"`
+means your project cannot use that model — pick another from
+`GET /v1beta/openai/models`.
+
+**OpenRouter alternative** (free vision model):
+
+```env
+AI_API_URL=https://openrouter.ai/api/v1
+AI_API_KEY=your-openrouter-key
+AI_MODEL=google/gemma-4-31b-it:free
+```
+
+**Z.ai / any other compatible provider** works the same way.
+
+- Every scan returns the verdict **twice**: `answers.hi` in simple Hindi
+  (Devanagari) and `answers.en` in simple English, written like an explanation to
+  a normal person with no technical words. The UI shows the Hindi block above
+  the English block, and both are stored in `detection_results`, so the history
+  shows the same wording later.
+- When the AI is unavailable, the same two blocks are generated from the risk
+  level and the indicators that were actually detected — never invented.
+- Technical detail (deterministic evidence, OCR confidence, threat-intel state)
+  stays in `explanation` / `recommendation` next to the easy answers.
+- Confirm that the model you pick accepts **image input** before relying on image scans.
 - Keep the key in `.env` only. It is used server-side and never sent to the browser.
+- `GET /api/health` reports `aiConfigured` and `aiModel` (never the key) so you can confirm the provider is live.
 - If `AI_API_KEY` is empty:
   - **Link/message:** deterministic checks run. The response and database set `detectionSource: "heuristic-fallback"` and `verified: false`, and the explanation says AI was unavailable.
   - **Image:** the server reads visible text locally with Tesseract OCR (English), then checks that text with the same deterministic message rules. The result is saved as `detectionSource: "ocr-fallback"`, `verified: false`, and the explanation states that no vision AI ran. OCR cannot detect forged layouts, logos or QR codes. If OCR itself cannot run, the API returns `503` and no verdict is invented.
   - The first OCR scan downloads the ~5 MB English language file into `backend/.cache/tesseract/` (git-ignored). Later scans are faster.
+
+### Image storage (Cloudinary)
+
+Scan images and profile photos are uploaded to **Cloudinary**, not to the server
+disk. This matters on Render/Railway, where the filesystem is temporary, and it
+keeps `backend/uploads/` from growing.
+
+```env
+CLOUDINARY_CLOUD_NAME=your-cloud-name
+CLOUDINARY_API_KEY=your-api-key
+CLOUDINARY_API_SECRET=your-api-secret
+CLOUDINARY_FOLDER=scamshield
+```
+
+- Create a free account at <https://cloudinary.com> and copy the three values
+  from **Dashboard → Product Environment Credentials**.
+- The uploaded file is decoded with `sharp`, stripped of EXIF/GPS metadata and
+  re-encoded before upload, so the original camera data is never stored.
+- MySQL keeps the secure URL (`scans.file_url`) and the public id
+  (`scans.file_public_id`). Deleting a scan, clearing history or deleting an
+  account really deletes the image from Cloudinary.
+- `GET /api/scans/:id/file` checks ownership first, then redirects (`302`) to
+  the Cloudinary URL. The public id is random, so an image cannot be guessed.
+- If Cloudinary is configured but unreachable, the scan fails with a clear
+  `503 IMAGE_STORAGE_UNAVAILABLE` instead of silently saving to local disk.
+- Without Cloudinary (local development, automated tests), images are stored in
+  `backend/uploads/` and served by the same owner-only route.
 
 ### Optional blacklist check
 
@@ -511,6 +596,17 @@ Scan response:
         "isScam": true,
         "explanation": "Deterministic analysis found: ... AI analysis was unavailable ...",
         "recommendation": "...",
+        "answers": {
+          "hi": {
+            "explanation": "संदेश में ओटीपी माँगा गया है, यह ठगी का संकेत है। ...",
+            "recommendation": "ओटीपी किसी से साझा न करें। ..."
+          },
+          "en": {
+            "explanation": "The message asks for an OTP, which is a scam sign. ...",
+            "recommendation": "Never share your OTP with anyone. ..."
+          }
+        },
+        "riskLevelHi": "बहुत ज़्यादा जोखिम",
         "detectionSource": "heuristic-fallback",
         "verified": false,
         "createdAt": "..."
@@ -561,8 +657,22 @@ Pagination is returned in `meta.pagination`.
 |---|---|---|---|
 | GET | `/settings/profile` | Yes | Safe profile |
 | PUT | `/settings/profile` | Yes | Update name / profile image / request email change |
-| PUT | `/settings/change-password` | Yes | Verify current password, revoke sessions |
+| PUT | `/settings/change-password` | Yes | Verify current password, revoke other sessions |
+| POST | `/settings/avatar` | Yes | Upload a profile photo (`avatar` field, JPG/PNG) |
+| DELETE | `/settings/avatar` | Yes | Remove the profile photo |
+| GET | `/settings/sessions` | Yes | List active sessions (device, IP, last used) |
+| DELETE | `/settings/sessions/:id` | Yes | Sign out one other device |
+| DELETE | `/settings/sessions` | Yes | Sign out every other device |
+| GET | `/settings/export` | Yes | Download all of the account's data as JSON |
 | DELETE | `/settings/account` | Yes | Verify password, cascade-delete account |
+
+Uploaded photos are re-encoded to a 320×320 WebP and served from
+`GET /api/avatars/:filename`; that public route is the only one that allows
+cross-origin embedding so the browser can render it next to the API.
+
+Signed-out or revoked sessions lose API access immediately: the access token is
+only accepted while its refresh-token row is still active, not until the JWT
+expires.
 
 Update name:
 
@@ -683,7 +793,7 @@ node --test tests/risk.test.js tests/urlDetection.test.js tests/messageDetection
 7. Set `DB_LOGGING=false`; centralize logs with your host.
 8. Configure `SMTP_*`, `AI_API_*` and optionally `SAFE_BROWSING_API_KEY`.
 9. Run `npm run db:migrate` as a release step; do not use `sequelize.sync()`.
-10. Keep `uploads/` on a persistent disk with backups. If the platform uses an ephemeral filesystem, replace the local storage calls with S3/Cloudinary and keep the owner-only download route.
+10. Set `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` so scanned images live on Cloudinary instead of the ephemeral server disk. `uploads/` is then only used for local development.
 11. Build the frontend (`npm run build`) and serve `dist/` over HTTPS.
 12. Never commit `.env`, `uploads/`, or real API keys. `.gitignore` already covers them.
 
@@ -713,13 +823,15 @@ pm2 save
 | `EMAIL_NOT_CONFIGURED` | Set the `SMTP_*` variables. |
 | Image scan 503 | Both the vision AI and local OCR failed. Check the server log and that `backend/.cache/tesseract/` is writable / the language file can download. |
 | Image result says "not AI-verified" | Expected when `AI_API_KEY` is empty: the visible text was read with local OCR, not a vision model. |
+| `IMAGE_STORAGE_UNAVAILABLE` | Cloudinary rejected the upload. Check the three `CLOUDINARY_*` values, that the account is active, and your upload quota. |
+| Images appear in `backend/uploads/` | Cloudinary is not configured (or `NODE_ENV=test`). Nothing else writes to that folder in development. |
 | Integration tests time out | First run downloads MySQL; allow time/network. System MySQL is not required. |
 
 ---
 
 ## 12. Known scope boundaries
 
-- The **Settings page UI** is still the original placeholder; the frontend source contains no form fields to connect. All profile/password/delete APIs are ready.
+- The **Settings page** is connected to these APIs (profile, avatar, sessions, password, export, delete account).
 - The **Scan File component** (PDF/TXT) exists in the frontend but was not part of the requested image/link/message backend. Dashboard uploads accept images; PDF/TXT selections receive a clear "not analyzed" message.
 - **Password reset / email verification pages** do not exist in the frontend. The backend emails links to `/reset-password` and `/verify-email`; add those two pages to complete the browser flow.
 - Image analysis uses a vision model when configured; otherwise it uses local OCR and is always marked unverified. OCR cannot inspect visual layout, logos or QR codes, so it is not equivalent to a vision model.

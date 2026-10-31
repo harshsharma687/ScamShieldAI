@@ -1,17 +1,22 @@
 /**
  * Profile-photo storage.
  *
- * Avatars are re-encoded with sharp before they touch the disk: this strips
+ * Avatars are re-encoded with sharp before they are stored: this strips
  * EXIF/metadata, normalises the format to WebP and guarantees the stored file
- * really is an image. Files get a random UUID name inside uploads/avatars and
- * are readable only through GET /api/avatars/:filename, which is why the URL is
- * unguessable instead of an account id other people could enumerate.
+ * really is an image. With Cloudinary configured the photo goes there (the
+ * server disk is never used); otherwise it falls back to uploads/avatars so
+ * local development and the test suite keep working offline.
  */
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const sharp = require("sharp");
 const env = require("../config/env");
+const {
+  isCloudStorageEnabled,
+  uploadImageBuffer,
+  destroyImage,
+} = require("./cloudStorageService");
 
 const APP_ROOT = path.resolve(__dirname, "..", "..");
 const UPLOAD_ROOT = path.isAbsolute(env.uploads.directory)
@@ -27,22 +32,37 @@ async function ensureAvatarDirectory() {
   await fs.promises.mkdir(AVATAR_DIR, { recursive: true, mode: 0o750 });
 }
 
-/** Re-encodes the upload as a square 320x320 WebP and returns its public URL. */
+/**
+ * Re-encodes the upload as a square 320x320 WebP and stores it.
+ * Resolves with { url, publicId }; publicId is only set for cloud storage.
+ */
 async function saveAvatar(buffer) {
+  const processed = await sharp(buffer)
+    .rotate()
+    .resize(320, 320, { fit: "cover", position: "centre" })
+    .webp({ quality: 84 })
+    .toBuffer();
+
+  if (isCloudStorageEnabled()) {
+    const uploaded = await uploadImageBuffer(processed, {
+      kind: "avatars",
+      format: "webp",
+    });
+
+    return { url: uploaded.url, publicId: uploaded.publicId };
+  }
+
   await ensureAvatarDirectory();
 
   const filename = `${crypto.randomUUID()}.webp`;
   const absolutePath = path.join(AVATAR_DIR, filename);
 
-  await sharp(buffer)
-    .rotate()
-    .resize(320, 320, { fit: "cover", position: "centre" })
-    .webp({ quality: 84 })
-    .toFile(absolutePath);
+  await fs.promises.writeFile(absolutePath, processed, {
+    mode: 0o600,
+    flag: "wx",
+  });
 
-  await fs.promises.chmod(absolutePath, 0o600).catch(() => {});
-
-  return `${AVATAR_PUBLIC_PREFIX}${filename}`;
+  return { url: `${AVATAR_PUBLIC_PREFIX}${filename}`, publicId: null };
 }
 
 /** Returns the stored filename when a value points at one of our avatars. */
@@ -77,6 +97,20 @@ async function deleteAvatarForUrl(value) {
   }
 }
 
+/**
+ * Deletes a stored photo wherever it lives: the Cloudinary public id is
+ * authoritative, and the local path is only used for images uploaded before
+ * cloud storage (or when it is not configured).
+ */
+async function deleteStoredAvatar(publicId, url) {
+  if (publicId) {
+    await destroyImage(publicId);
+    return;
+  }
+
+  await deleteAvatarForUrl(url);
+}
+
 module.exports = {
   AVATAR_PUBLIC_PREFIX,
   AVATAR_FILENAME_PATTERN,
@@ -84,4 +118,5 @@ module.exports = {
   avatarFilenameFromUrl,
   resolveAvatarPath,
   deleteAvatarForUrl,
+  deleteStoredAvatar,
 };

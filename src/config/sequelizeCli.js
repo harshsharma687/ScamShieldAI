@@ -3,11 +3,15 @@
  * The running application uses database.js instead.
  */
 const path = require("path");
+const { buildMysqlSslOptions } = require("./mysqlSsl");
 
 require("dotenv").config({
   path: path.resolve(__dirname, "..", "..", ".env"),
   quiet: true,
 });
+
+const mysqlSsl = buildMysqlSslOptions();
+const ssl = mysqlSsl ? { ssl: mysqlSsl } : null;
 
 const common = {
   username: process.env.DB_USER || "root",
@@ -24,6 +28,7 @@ const common = {
   },
   dialectOptions: {
     charset: "utf8mb4",
+    ...(ssl || {}),
   },
 };
 

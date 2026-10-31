@@ -32,6 +32,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(2048),
         allowNull: true,
       },
+      // Cloudinary public id for an uploaded photo (null for external URLs).
+      profileImagePublicId: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
       // A new email is stored here until the owner proves control of it.
       pendingEmail: {
         type: DataTypes.STRING(191),
@@ -73,6 +78,7 @@ module.exports = (sequelize, DataTypes) => {
     const values = { ...this.get() };
 
     delete values.password;
+    delete values.profileImagePublicId;
     delete values.pendingEmail;
     delete values.emailChangeTokenHash;
     delete values.emailChangeExpiresAt;

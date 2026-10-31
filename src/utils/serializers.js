@@ -3,6 +3,8 @@
  * Keeping this in one place prevents accidentally returning hashes, internal
  * file paths or other users' data.
  */
+const { RISK_HINDI } = require("./bilingual");
+
 const TYPE_LABELS = {
   image: "Image",
   link: "Link",
@@ -40,6 +42,21 @@ function serializeResult(result) {
     isScam: Boolean(result.isScam),
     explanation: result.explanation,
     recommendation: result.recommendation,
+    // Two easy-language answers, shown one above the other in the UI. Rows
+    // created before this feature only have the English half.
+    answers: {
+      hi: result.explanationHi
+        ? {
+            explanation: result.explanationHi,
+            recommendation: result.recommendationHi || "",
+          }
+        : null,
+      en: {
+        explanation: result.explanationEn || result.explanation,
+        recommendation: result.recommendationEn || result.recommendation,
+      },
+    },
+    riskLevelHi: RISK_HINDI[result.riskLevel] || result.riskLevel,
     detectionSource: result.detectionSource,
     verified: isVerified(result),
     createdAt: result.createdAt,

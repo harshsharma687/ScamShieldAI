@@ -30,6 +30,23 @@ async function revokeAllUserTokens(userId) {
 }
 
 /**
+ * Ends every session except the one making the request. Used after a password
+ * change: other devices are signed out, while the person who just proved their
+ * new password stays signed in here.
+ */
+async function revokeOtherUserTokens(userId, keepSessionId) {
+  const where = { userId, revokedAt: { [Op.is]: null } };
+
+  if (keepSessionId) {
+    where.id = { [Op.ne]: keepSessionId };
+  }
+
+  const [revokedCount] = await RefreshToken.update({ revokedAt: new Date() }, { where });
+
+  return revokedCount;
+}
+
+/**
  * Normalises the request metadata stored next to a session. Values are
  * truncated because a browser can send an arbitrarily long User-Agent.
  */
@@ -180,25 +197,37 @@ async function rotateRefreshToken(rawToken, res, meta = {}) {
   };
 }
 
+/**
+ * Ends one session by its row id. Used by logout when the refresh cookie is
+ * unavailable but the access token still identifies the session.
+ *
+ * The row is deleted rather than marked revoked, so a stale tab that tries to
+ * refresh afterwards gets "session no longer valid" instead of being treated
+ * as a stolen-token replay (which would sign every other device out too).
+ */
+async function revokeSessionById(sessionId) {
+  if (!sessionId) return false;
+
+  const deleted = await RefreshToken.destroy({ where: { id: sessionId } });
+
+  return deleted > 0;
+}
+
 async function revokeRefreshToken(rawToken) {
   if (!rawToken) return false;
 
-  const [affected] = await RefreshToken.update(
-    { revokedAt: new Date() },
-    {
-      where: {
-        tokenHash: hashToken(rawToken),
-        revokedAt: { [Op.is]: null },
-      },
-    }
-  );
+  const deleted = await RefreshToken.destroy({
+    where: { tokenHash: hashToken(rawToken) },
+  });
 
-  return affected > 0;
+  return deleted > 0;
 }
 
 module.exports = {
   createSession,
   rotateRefreshToken,
   revokeRefreshToken,
+  revokeSessionById,
   revokeAllUserTokens,
+  revokeOtherUserTokens,
 };

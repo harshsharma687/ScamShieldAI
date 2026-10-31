@@ -7,6 +7,9 @@
  * The model is treated as an untrusted component: its JSON is validated,
  * clamped to 0-100, and its `isScam` claim is ignored. The backend derives the
  * final level from the score using the same rules for every scan type.
+ *
+ * The model always answers twice: once in simple Hindi and once in simple
+ * English, with short sentences and no technical wording.
  */
 const axios = require("axios");
 const env = require("../config/env");
@@ -30,9 +33,11 @@ Analyse ONLY the evidence supplied by the user. Never invent facts, never browse
 Return exactly one JSON object with this schema:
 {
   "riskScore": <integer 0-100>,
-  "explanation": "<2-4 short sentences citing the concrete evidence you saw>",
-  "recommendation": "<one practical safety instruction>",
-  "indicators": ["<short evidence label>", "..."]
+  "explanation_en": "<2-3 very simple English sentences>",
+  "explanation_hi": "<the same 2-3 sentences in very simple Hindi>",
+  "recommendation_en": "<1-2 very simple English sentences telling the person what to do>",
+  "recommendation_hi": "<the same advice in very simple Hindi>",
+  "indicators": ["<short English evidence label>", "..."]
 }
 
 Scoring rules:
@@ -40,7 +45,19 @@ Scoring rules:
 - 30-59: Medium. Some suspicious signs but not enough to call it fraud.
 - 60-79: High. Multiple strong indicators or one explicit harmful request.
 - 80-100: Critical. Clear phishing, credential theft, payment fraud or impersonation evidence.
-Only claim fraud when the content itself contains supporting evidence. If the evidence is weak or missing, keep the score low and say it is unverified. Do not return markdown, code fences or text outside the JSON.`;
+Only claim fraud when the content itself contains supporting evidence. If the evidence is weak or missing, keep the score low and say it is unverified. Do not return markdown, code fences or text outside the JSON.
+
+WRITING STYLE (important):
+- Write like you are explaining to a normal person who is not technical. Very easy words, short sentences.
+- Say what you actually saw in the content ("It asks you to share an OTP"), not rules or jargon.
+- No bullet lists, no markdown, no scores inside the sentences.
+- End explanation_en with one short sentence saying this is an automatic check and not a guarantee.
+- End explanation_hi with the Hindi version of that same warning: यह जाँच मशीन द्वारा की गई है, 100% गारंटी नहीं है।
+
+LANGUAGE (important):
+- Always fill BOTH explanation_en and explanation_hi, even if the content is in only one language.
+- English must be plain English. Hindi must be Devanagari in very simple Hindi that an ordinary person understands; do not translate word by word, write natural Hindi.
+- Keep the JSON keys exactly as shown above (in English).`;
 
 function isAiConfigured() {
   return Boolean(env.ai.apiUrl && env.ai.apiKey);
@@ -91,6 +108,10 @@ function parseJsonObject(content) {
   }
 }
 
+function text(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 function validateAnalysis(payload) {
   const risk = Number(payload.riskScore ?? payload.risk_score);
 
@@ -101,14 +122,15 @@ function validateAnalysis(payload) {
     );
   }
 
-  const explanation =
-    typeof payload.explanation === "string" ? payload.explanation.trim() : "";
-  const recommendation =
-    typeof payload.recommendation === "string"
-      ? payload.recommendation.trim()
-      : "";
+  // Older providers/models may still answer with the single-language keys.
+  const explanationEn = text(payload.explanation_en) || text(payload.explanation);
+  const explanationHi =
+    text(payload.explanation_hi) || text(payload.explanation_hi_in);
+  const recommendationEn =
+    text(payload.recommendation_en) || text(payload.recommendation);
+  const recommendationHi = text(payload.recommendation_hi);
 
-  if (explanation.length < 10) {
+  if (explanationEn.length < 10 && explanationHi.length < 10) {
     throw new AiServiceError(
       "The AI provider returned an incomplete explanation. No verdict was generated.",
       "AI_INVALID_RESPONSE"
@@ -124,10 +146,16 @@ function validateAnalysis(payload) {
 
   return {
     riskScore: clampScore(risk),
-    explanation: explanation.slice(0, 2500),
+    // `explanation`/`recommendation` stay for the detailed technical answer
+    // used in the stored record; the two easy blocks are what the UI shows.
+    explanation: explanationEn.slice(0, 2500),
     recommendation:
-      recommendation.slice(0, 1200) ||
+      recommendationEn.slice(0, 1200) ||
       "Verify the sender through an official channel and do not share personal information.",
+    explanationEn: explanationEn.slice(0, 2500),
+    explanationHi: explanationHi.slice(0, 2500),
+    recommendationEn: recommendationEn.slice(0, 1200),
+    recommendationHi: recommendationHi.slice(0, 1200),
     indicators,
   };
 }
@@ -167,7 +195,7 @@ async function requestCompletion(payload) {
  * Sends the supplied evidence to the configured model and returns a validated
  * verdict. Throws AiServiceError when no trustworthy analysis is available.
  */
-async function analyzeWithAI({ scanType, text, url, imageBase64, imageMimeType, indicators = [] }) {
+async function analyzeWithAI({ scanType, text: submittedText, url, imageBase64, imageMimeType, indicators = [] }) {
   if (!isAiConfigured()) {
     throw new AiServiceError(
       "AI detection is not configured. Set AI_API_URL and AI_API_KEY on the server.",
@@ -178,7 +206,7 @@ async function analyzeWithAI({ scanType, text, url, imageBase64, imageMimeType, 
   const evidenceLines = [
     `Scan type: ${scanType}`,
     url ? `URL: ${url}` : null,
-    text ? `Message:\n${text}` : null,
+    submittedText ? `Message:\n${submittedText}` : null,
     indicators.length
       ? `Deterministic checks found: ${indicators.join("; ")}`
       : "Deterministic checks found no specific indicators.",
@@ -203,7 +231,8 @@ async function analyzeWithAI({ scanType, text, url, imageBase64, imageMimeType, 
   const payload = {
     model: env.ai.model,
     temperature: 0.1,
-    max_tokens: 800,
+    // Two languages need noticeably more tokens than one.
+    max_tokens: 2000,
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: SYSTEM_PROMPT },

@@ -602,9 +602,26 @@ describe("ScamShield AI API", () => {
 
     const afterReplay = await agent2.post("/api/auth/refresh");
     assert.equal(afterReplay.status, 401);
+
+    // Detecting a replayed refresh token ends every session for the account,
+    // so the access token issued for one of those sessions stops working
+    // immediately instead of surviving until it expires.
+    const revokedAccess = await request(app)
+      .get("/api/auth/me")
+      .set(bearer(token2));
+    assert.equal(revokedAccess.status, 401);
+    assert.equal(revokedAccess.body.code, "SESSION_REVOKED");
   });
 
   test("settings update profile, reject email changes without SMTP, and change password", async () => {
+    // The reuse test above revoked every session for this account.
+    const freshLogin = await request(app).post("/api/auth/login").send({
+      email: "user2@example.com",
+      password: "Password123",
+    });
+    assert.equal(freshLogin.status, 200);
+    token2 = freshLogin.body.data.accessToken;
+
     const profile = await request(app)
       .get("/api/settings/profile")
       .set(bearer(token2));
@@ -644,6 +661,12 @@ describe("ScamShield AI API", () => {
         newPassword: "NewPassword123",
       });
     assert.equal(changed.status, 200);
+
+    // The session that changed the password stays usable; other devices do not.
+    const stillSignedIn = await request(app)
+      .get("/api/auth/me")
+      .set(bearer(token2));
+    assert.equal(stillSignedIn.status, 200);
 
     const oldLogin = await request(app).post("/api/auth/login").send({
       email: "user2@example.com",

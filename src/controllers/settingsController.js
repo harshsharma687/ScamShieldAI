@@ -8,7 +8,7 @@ const AppError = require("../utils/AppError");
 const asyncHandler = require("../utils/asyncHandler");
 const { sendSuccess } = require("../utils/apiResponse");
 const { hashToken, clearRefreshCookie } = require("../utils/generateToken");
-const { revokeAllUserTokens } = require("../services/refreshTokenService");
+const { revokeOtherUserTokens } = require("../services/refreshTokenService");
 const {
   isEmailConfigured,
   sendEmailChangeVerification,
@@ -20,8 +20,9 @@ const {
   saveAvatar,
   avatarFilenameFromUrl,
   resolveAvatarPath,
-  deleteAvatarForUrl,
+  deleteStoredAvatar,
 } = require("../services/avatarService");
+const { destroyImage } = require("../services/cloudStorageService");
 
 function normalizeProfileImage(value) {
   if (value === null || value === "") return null;
@@ -107,6 +108,7 @@ const updateProfile = asyncHandler(async (req, res) => {
 
   if (profileImage !== undefined) {
     const previousImage = user.profileImage;
+    const previousPublicId = user.profileImagePublicId;
     const nextImage = normalizeProfileImage(profileImage);
 
     user.profileImage = nextImage;
@@ -114,7 +116,8 @@ const updateProfile = asyncHandler(async (req, res) => {
     // Replacing an uploaded photo with a URL (or removing it) leaves the old
     // file behind otherwise.
     if (previousImage && previousImage !== nextImage) {
-      await deleteAvatarForUrl(previousImage).catch(() => {});
+      user.profileImagePublicId = null;
+      await deleteStoredAvatar(previousPublicId, previousImage).catch(() => {});
     }
   }
 
@@ -189,8 +192,11 @@ const changePassword = asyncHandler(async (req, res) => {
   const passwordHash = await bcrypt.hash(newPassword, env.bcryptSaltRounds);
 
   await user.update({ password: passwordHash });
-  await revokeAllUserTokens(user.id);
-  clearRefreshCookie(res);
+
+  // Other devices lose access immediately (the session check in
+  // authMiddleware rejects their tokens), while this session stays valid so
+  // the person is not thrown out of the page they are using.
+  const revokedSessions = await revokeOtherUserTokens(user.id, req.sessionId);
 
   if (isEmailConfigured()) {
     sendPasswordChangedNotice({ to: user.email, name: user.name }).catch(() => {
@@ -202,7 +208,11 @@ const changePassword = asyncHandler(async (req, res) => {
   return sendSuccess(
     res,
     200,
-    "Password changed successfully. Other sessions have been signed out."
+    revokedSessions > 0
+      ? `Password changed successfully. ${revokedSessions} other session${
+          revokedSessions === 1 ? "" : "s"
+        } signed out.`
+      : "Password changed successfully."
   );
 });
 
@@ -220,18 +230,25 @@ const deleteAccount = asyncHandler(async (req, res) => {
 
   const scans = await Scan.findAll({
     where: { userId: user.id },
-    attributes: ["id", "fileUrl"],
+    attributes: ["id", "fileUrl", "filePublicId"],
   });
   const previousImage = user.profileImage;
+  const previousPublicId = user.profileImagePublicId;
 
   // Foreign keys cascade: scans, detection results and refresh tokens are
   // removed with the account.
   await user.destroy();
 
   await Promise.allSettled(
-    scans.filter((scan) => scan.fileUrl).map((scan) => deleteUpload(scan.fileUrl))
+    scans
+      .filter((scan) => scan.fileUrl)
+      .map((scan) =>
+        scan.filePublicId
+          ? destroyImage(scan.filePublicId)
+          : deleteUpload(scan.fileUrl)
+      )
   );
-  await deleteAvatarForUrl(previousImage).catch(() => {});
+  await deleteStoredAvatar(previousPublicId, previousImage).catch(() => {});
 
   clearRefreshCookie(res);
 
@@ -258,12 +275,16 @@ const uploadAvatar = asyncHandler(async (req, res) => {
 
   const user = req.user;
   const previousImage = user.profileImage;
-  const profileImage = await saveAvatar(req.file.buffer);
+  const previousPublicId = user.profileImagePublicId;
+  const saved = await saveAvatar(req.file.buffer);
 
-  await user.update({ profileImage });
+  await user.update({
+    profileImage: saved.url,
+    profileImagePublicId: saved.publicId,
+  });
 
-  if (previousImage && previousImage !== profileImage) {
-    await deleteAvatarForUrl(previousImage).catch(() => {});
+  if (previousImage && previousImage !== saved.url) {
+    await deleteStoredAvatar(previousPublicId, previousImage).catch(() => {});
   }
 
   return sendSuccess(res, 200, "Profile photo updated.", {
@@ -274,9 +295,10 @@ const uploadAvatar = asyncHandler(async (req, res) => {
 const removeAvatar = asyncHandler(async (req, res) => {
   const user = req.user;
   const previousImage = user.profileImage;
+  const previousPublicId = user.profileImagePublicId;
 
-  await user.update({ profileImage: null });
-  await deleteAvatarForUrl(previousImage).catch(() => {});
+  await user.update({ profileImage: null, profileImagePublicId: null });
+  await deleteStoredAvatar(previousPublicId, previousImage).catch(() => {});
 
   return sendSuccess(res, 200, "Profile photo removed.", {
     user: serializeUser(user),
@@ -302,6 +324,10 @@ const serveAvatar = asyncHandler(async (req, res) => {
 
   res.setHeader("Cache-Control", "public, max-age=86400");
   res.setHeader("X-Content-Type-Options", "nosniff");
+  // The frontend runs on a different origin (Vite on :5173, the API on :5000),
+  // and helmet's default same-origin policy would block this image from
+  // rendering. Nothing else about the response is relaxed.
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
   res.type("image/webp");
 
   return res.sendFile(absolutePath);

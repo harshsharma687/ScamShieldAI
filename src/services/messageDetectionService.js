@@ -16,6 +16,7 @@ const {
   isScamScore,
   buildRecommendation,
 } = require("../utils/risk");
+const { buildEasyAnswer, answersFromAi } = require("../utils/bilingual");
 
 const URL_PATTERN = /\b(?:https?:\/\/|www\.)[^\s<>"'`]+/gi;
 
@@ -25,14 +26,14 @@ const RULES = [
     label: "Asks for an OTP or verification code",
     weight: 40,
     pattern:
-      /(?:send|share|tell|give|provide|forward|reply\s+with|type|enter|confirm)\b[^.!?\n]{0,50}\b(?:otp|one[\s-]?time\s+(?:password|code)|verification\s+code|security\s+code)\b/i,
+      /(?:send|share|tell|give|provide|forward|reply\s+with|type|enter|confirm|bhej\w*|bhejo|daal\w*|dalo|dein|dedo|batayein|batado)\b[^.!?\n]{0,50}\b(?:otp|one[\s-]?time\s+(?:password|code)|verification\s+code|security\s+code|ओटीपी)\b/i,
   },
   {
     code: "otp-request-reverse",
     label: "Asks for an OTP or verification code",
     weight: 40,
     pattern:
-      /\b(?:otp|one[\s-]?time\s+(?:password|code)|verification\s+code|security\s+code)\b[^.!?\n]{0,50}\b(?:send|share|tell|give|provide|forward|reply)\b/i,
+      /\b(?:otp|one[\s-]?time\s+(?:password|code)|verification\s+code|security\s+code|ओटीपी)\b[^.!?\n]{0,50}\b(?:send|share|tell|give|provide|forward|reply|bhej\w*|bhejo|daal\w*|dalo|dein|dedo|batayein|batado)\b/i,
   },
   {
     code: "password-request",
@@ -67,14 +68,14 @@ const RULES = [
     label: "Uses urgency or a deadline",
     weight: 12,
     pattern:
-      /\b(?:urgent|immediately|act\s+now|right\s+now|within\s+\d+\s+(?:minutes?|hours?|days?)|last\s+chance|final\s+warning|expires?\s+(?:today|soon))\b/i,
+      /\b(?:urgent|immediately|act\s+now|right\s+now|within\s+\d+\s+(?:minutes?|hours?|days?)|last\s+chance|final\s+warning|expires?\s+(?:today|soon)|turant|jaldi)\b/i,
   },
   {
     code: "account-threat",
     label: "Threatens that an account or card will be blocked",
     weight: 12,
     pattern:
-      /\b(?:account|card|wallet)\b[^.!?\n]{0,25}\b(?:blocked|suspended|deactivated|locked|closed|frozen)\b|\b(?:blocked|suspended|deactivated|locked|closed|frozen)\b[^.!?\n]{0,25}\b(?:account|card|wallet)\b/i,
+      /\b(?:account|card|wallet)\b[^.!?\n]{0,25}\b(?:blocked|suspended|deactivated|locked|closed|frozen|band\s+ho\s+ja\w*)\b|\b(?:blocked|suspended|deactivated|locked|closed|frozen)\b[^.!?\n]{0,25}\b(?:account|card|wallet)\b|\b(?:account|card)\b[^.!?\n]{0,25}\bblock\s+ho\s+ga\w*\b/i,
   },
   {
     code: "impersonation",
@@ -271,15 +272,19 @@ function getMessageIndicators(text) {
 function buildMessageExplanation({ indicators, ai, aiError, riskLevel }) {
   const parts = [];
 
+  // When AI answered, its explanation leads: it is written in the same
+  // language as the submitted message (English, Hindi or Hinglish).
+  if (ai) {
+    parts.push(ai.explanation);
+  }
+
   if (indicators.length) {
     parts.push(`Deterministic analysis found: ${indicators.map((item) => item.label).join("; ")}.`);
-  } else {
+  } else if (!ai) {
     parts.push("Deterministic analysis found no specific scam indicators.");
   }
 
-  if (ai) {
-    parts.push(`AI analysis: ${ai.explanation}`);
-  } else {
+  if (!ai) {
     parts.push(
       `AI analysis was unavailable${
         aiError?.code === "AI_NOT_CONFIGURED" ? " (no AI provider configured)" : ""
@@ -354,6 +359,11 @@ async function analyzeMessage(message) {
       riskLevel,
     }),
     recommendation: ai?.recommendation || buildRecommendation(riskLevel),
+    // The same verdict in easy Hindi and easy English, for the two answer
+    // blocks the UI shows and for the stored history.
+    answers: ai
+      ? answersFromAi({ ai, riskLevel, riskScore: score, indicators })
+      : buildEasyAnswer({ riskLevel, riskScore: score, indicators }),
     detectionSource: ai ? "ai+heuristics" : "heuristic-fallback",
     verified: Boolean(ai),
     indicators,

@@ -3,7 +3,12 @@ const AppError = require("../utils/AppError");
 const { sendSuccess } = require("../utils/apiResponse");
 const { Scan } = require("../models");
 const { detectImageType, saveImageBuffer, deleteUpload } = require("../utils/fileStorage");
-const { analyzeImage } = require("../services/imageDetectionService");
+const { prepareImage, analyzeImage } = require("../services/imageDetectionService");
+const {
+  isCloudStorageEnabled,
+  uploadImageBuffer,
+  destroyImage,
+} = require("../services/cloudStorageService");
 const {
   sanitizeOriginalFilename,
   completeScan,
@@ -48,13 +53,33 @@ const scanImage = asyncHandler(async (req, res) => {
     status: "pending",
   });
 
-  let savedFile = null;
+  let storedImage = null;
 
   try {
-    savedFile = await saveImageBuffer(req.file.buffer, detected.extension);
-    await scan.update({ fileUrl: savedFile.relativePath });
+    // Decode once: this rejects decompression bombs, strips EXIF/GPS metadata
+    // and produces the single clean JPEG that is both stored and analysed.
+    const prepared = await prepareImage(req.file.buffer);
 
-    const analysis = await analyzeImage({ buffer: req.file.buffer });
+    if (isCloudStorageEnabled()) {
+      const uploaded = await uploadImageBuffer(prepared.buffer, {
+        kind: "scans",
+        format: "jpg",
+      });
+
+      storedImage = {
+        fileUrl: uploaded.url,
+        filePublicId: uploaded.publicId,
+      };
+    } else {
+      // Local development and the test suite run offline.
+      const saved = await saveImageBuffer(prepared.buffer, "jpg");
+
+      storedImage = { fileUrl: saved.relativePath, filePublicId: null };
+    }
+
+    await scan.update(storedImage);
+
+    const analysis = await analyzeImage({ prepared });
     const result = await completeScan(scan, analysis);
 
     return sendSuccess(res, 201, "Image scan completed successfully.", {
@@ -64,9 +89,11 @@ const scanImage = asyncHandler(async (req, res) => {
   } catch (error) {
     await failScan(scan);
 
-    if (savedFile) {
+    if (storedImage?.filePublicId) {
+      await destroyImage(storedImage.filePublicId).catch(() => {});
+    } else if (storedImage?.fileUrl) {
       try {
-        await deleteUpload(savedFile.relativePath);
+        await deleteUpload(storedImage.fileUrl);
       } catch {
         // A leftover file is logged by the storage layer; never mask the real
         // analysis error because cleanup failed.

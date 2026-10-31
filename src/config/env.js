@@ -121,6 +121,10 @@ module.exports = {
     user: required("DB_USER"),
     password: optional("DB_PASSWORD"),
     logging: toBoolean(optional("DB_LOGGING"), false),
+    // Set DB_SSL=true for a hosted MySQL (Aiven, Railway, TiDB Cloud, ...).
+    ssl: toBoolean(optional("DB_SSL"), false),
+    sslCaPath: optional("DB_SSL_CA_PATH"),
+    poolMax: Math.min(20, Math.max(2, toNumber(optional("DB_POOL_MAX", "10"), 10))),
   },
 
   jwt: {
@@ -159,5 +163,15 @@ module.exports = {
   uploads: {
     directory: optional("UPLOAD_DIR", "uploads"),
     maxImageBytes: toNumber(optional("MAX_IMAGE_SIZE_MB", "10"), 10) * 1024 * 1024,
+  },
+
+  cloudinary: {
+    cloudName: optional("CLOUDINARY_CLOUD_NAME"),
+    apiKey: optional("CLOUDINARY_API_KEY"),
+    apiSecret: optional("CLOUDINARY_API_SECRET"),
+    folder: optional("CLOUDINARY_FOLDER", "scamshield"),
+    get isConfigured() {
+      return Boolean(this.cloudName && this.apiKey && this.apiSecret);
+    },
   },
 };
